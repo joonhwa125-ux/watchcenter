@@ -1,0 +1,287 @@
+:root {
+  --primary: #3b82f6;
+  --bg: #f8fafc;
+  --sidebar: #ffffff;
+  --text-main: #1e293b;
+  --text-sub: #64748b;
+  --border: #e2e8f0;
+}
+
+* {
+  box-sizing: border-box;
+}
+body,
+html {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family:
+    "Pretendard",
+    -apple-system,
+    sans-serif;
+  background-color: var(--bg);
+  color: var(--text-main);
+  overflow: hidden;
+}
+
+/* 레이아웃 */
+.app-container {
+  display: flex;
+  height: 100vh;
+}
+.sidebar {
+  width: 280px;
+  background: var(--sidebar);
+  border-right: 1px solid var(--border);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  flex-shrink: 0;
+}
+.logo {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 업로드 */
+.upload-box {
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+  transition: 0.2s;
+  cursor: pointer;
+  background: #f1f5f9;
+}
+.upload-box:hover {
+  border-color: var(--primary);
+  background: #eff6ff;
+}
+.upload-desc {
+  font-size: 12px;
+  color: var(--text-sub);
+  margin-top: 5px;
+}
+
+/* 드롭다운 (NEW) */
+.search-group label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-sub);
+  display: block;
+  margin-bottom: 6px;
+}
+.search-select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+  transition: 0.2s;
+  background-color: white;
+  cursor: pointer;
+}
+.search-select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+.search-select:disabled {
+  background-color: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+/* 통계 박스 (NEW) */
+.stats-box {
+  background: #f8fafc;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-sub);
+}
+.stats-box span {
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.footer-info {
+  margin-top: auto;
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: center;
+}
+
+/* 뷰 전환 */
+.main-content {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+.view-section {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+  padding: 20px;
+  overflow-y: auto;
+  transition:
+    transform 0.3s ease,
+    opacity 0.3s ease;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(20px);
+}
+.view-section.active {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+/* 캘린더 */
+#calendarWrapper {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  height: 100%;
+  border: 1px solid var(--border);
+}
+.fc-event {
+  cursor: pointer;
+  border: none !important;
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+.fc-toolbar-title {
+  font-size: 1.25rem !important;
+  font-weight: 700;
+}
+
+/* 리스트 뷰 */
+.list-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 20px;
+  background: white;
+  padding: 15px 20px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+.btn-back {
+  background: none;
+  border: 1px solid var(--border);
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.btn-back:hover {
+  background: #f1f5f9;
+}
+.list-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 16px;
+}
+.issue-card {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: 0.2s;
+  position: relative;
+}
+.issue-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  border-color: var(--primary);
+}
+
+/* 배지 & 상태 */
+.badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.badge.assign {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.badge.mention {
+  background: #fff7ed;
+  color: #c2410c;
+}
+.badge.comment {
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.issue-card.read {
+  opacity: 0.6;
+  background: #f8fafc;
+}
+.check-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 24px;
+  height: 24px;
+  border: 1px solid #cbd5e1;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #cbd5e1;
+}
+.check-btn:hover {
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+.issue-card.read .check-btn {
+  background: #22c55e;
+  border-color: #22c55e;
+  color: white;
+}
+
+.day-stats {
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+  padding-top: 2px;
+  padding-right: 4px;
+}
+.stat-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.stat-dot.assign {
+  background: #3b82f6;
+}
+.stat-dot.mention {
+  background: #f97316;
+}
+.stat-dot.comment {
+  background: #22c55e;
+}

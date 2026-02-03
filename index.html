@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jira Watchtower</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/iconify/3.1.1/iconify.min.js"></script>
+
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <div class="app-container">
+      <aside class="sidebar">
+        <div class="logo">
+          <span class="iconify" data-icon="heroicons:rectangle-stack-solid" style="color: var(--primary)"></span>
+          Watchtower
+        </div>
+
+        <div class="upload-box" id="uploadDropZone">
+          <span class="iconify" data-icon="heroicons:cloud-arrow-up" style="font-size: 24px; color: var(--text-sub)"></span>
+          <div style="font-weight: 600; margin-top: 5px">파일 선택</div>
+          <div class="upload-desc" id="fileName">KakaoTalk_Chats.txt</div>
+          <input type="file" id="fileInput" accept=".txt" style="display: none" />
+        </div>
+
+        <div class="search-group">
+          <label for="userSelect">사용자 선택</label>
+          <select id="userSelect" class="search-select" disabled>
+            <option value="">파일을 먼저 올려주세요</option>
+          </select>
+        </div>
+
+        <div class="stats-box" id="globalStats" style="display: none">
+          <div>발견된 이슈: <span id="totalIssueCount">0</span>건</div>
+          <div>참여자: <span id="totalUserCount">0</span>명</div>
+        </div>
+
+        <div class="footer-info">Data stays in your browser.<br />100% Secure.</div>
+      </aside>
+
+      <main class="main-content">
+        <div id="calendarView" class="view-section active">
+          <div id="calendarWrapper">
+            <div id="calendar"></div>
+          </div>
+        </div>
+
+        <div id="listView" class="view-section">
+          <div class="list-header">
+            <button class="btn-back" id="btnBackToCalendar"><span class="iconify" data-icon="heroicons:arrow-left"></span> 캘린더로 복귀</button>
+            <div class="list-title" id="listTitle">날짜 상세</div>
+          </div>
+          <div id="cardGrid" class="card-grid"></div>
+        </div>
+      </main>
+    </div>
+
+    <script src="js/app.js"></script>
+  </body>
+</html>
