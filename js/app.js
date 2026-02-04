@@ -1,387 +1,421 @@
 document.addEventListener("DOMContentLoaded", () => {
-  // --- [Core] 전역 변수 ---
-  let rawTextData = "";
-  let parsedData = []; // 파싱된 원본 데이터
-  let deduplicatedData = []; // 중복 제거된 데이터
-  let currentFilteredData = [];
-  let calendar = null;
-  let readIssues = JSON.parse(localStorage.getItem("readIssues_v3")) || [];
+  // 1. STATE MODULE
+  const State = {
+    rawText: "",
+    parsedData: [],
+    dedupData: [],
+    readIssues: JSON.parse(localStorage.getItem("readIssues_v3")) || [],
 
-  // --- [UI] DOM 요소 ---
-  const fileInput = document.getElementById("fileInput");
-  const uploadBox = document.getElementById("uploadDropZone");
-  const fileNameDisplay = document.getElementById("fileName");
-  const userSelect = document.getElementById("userSelect");
-  const btnBack = document.getElementById("btnBackToCalendar");
+    saveSession(filename, text) {
+      this.rawText = text;
+      localStorage.setItem("watchtower_cached_text", text);
+      localStorage.setItem("watchtower_cached_filename", filename);
+    },
+    clearSession() {
+      localStorage.removeItem("watchtower_cached_text");
+      localStorage.removeItem("watchtower_cached_filename");
+    },
+  };
 
-  // 통계 표시용
-  const globalStats = document.getElementById("globalStats");
-  const totalIssueCount = document.getElementById("totalIssueCount");
-  const totalUserCount = document.getElementById("totalUserCount");
+  // 2. UI MODULE
+  const UI = {
+    els: {
+      dropZone: document.getElementById("dropZone"),
+      fileInput: document.getElementById("fileInput"),
+      fileName: document.getElementById("fileName"),
+      userSelect: document.getElementById("userSelect"),
 
-  const calendarView = document.getElementById("calendarView");
-  const listView = document.getElementById("listView");
-  const cardGrid = document.getElementById("cardGrid");
-  const listTitle = document.getElementById("listTitle");
+      // [수정] 통계 영역 전체를 감싸는 섹션 (statsSection) 추가
+      statsSection: document.getElementById("statsSection"),
+      statsPanel: document.getElementById("statsPanel"),
+      issueCount: document.getElementById("totalIssueCount"),
+      userCount: document.getElementById("totalUserCount"),
 
-  // --- [Event] 리스너 ---
-  uploadBox.addEventListener("click", () => fileInput.click());
+      restoreNotice: document.getElementById("restoreNotice"),
+      cardGrid: document.getElementById("cardGrid"),
+      listTitle: document.getElementById("listTitle"),
+      calendarEl: document.getElementById("calendar"),
+      views: { calendar: document.getElementById("calendarView"), list: document.getElementById("listView") },
+      btns: {
+        clear: document.getElementById("btnClearData"),
+        save: document.getElementById("btnDownloadBackup"),
+        restore: document.getElementById("btnRestoreBackup"),
+        back: document.getElementById("btnBackToCalendar"),
+      },
+      backupInput: document.getElementById("backupInput"),
+    },
 
-  fileInput.addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    fileNameDisplay.textContent = file.name;
+    reset() {
+      // [수정] 통계 섹션 전체를 숨김
+      if (this.els.statsSection) this.els.statsSection.style.display = "none";
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      rawTextData = event.target.result;
-      processLogAndInit();
-    };
-    reader.readAsText(file, "UTF-8");
-  });
+      this.els.restoreNotice.style.display = "none";
+      this.els.userSelect.innerHTML = '<option value="">데이터 없음</option>';
+      this.els.userSelect.disabled = true;
+      this.els.fileName.textContent = "선택된 파일 없음";
+      this.els.dropZone.title = "";
+    },
 
-  userSelect.addEventListener("change", () => {
-    renderApp(userSelect.value);
-  });
+    updateFileName(name, isRestore = false) {
+      this.els.fileName.textContent = name;
+      this.els.dropZone.title = name;
 
-  btnBack.addEventListener("click", showCalendarView);
+      if (isRestore) {
+        this.els.restoreNotice.style.display = "flex";
+      } else {
+        this.els.restoreNotice.style.display = "none";
+      }
+    },
 
-  // --- [Logic 1] 파싱 및 초기화 ---
-  function processLogAndInit() {
-    parsedData = parseKakaoLogJS(rawTextData);
+    renderStats(totalIssues, totalUsers) {
+      // [수정] 통계 섹션 전체를 보이게 함
+      if (this.els.statsSection) this.els.statsSection.style.display = "block";
+      // (혹은 flex가 필요하다면 'flex'로 지정, 위 CSS에서 .group-section은 flex-col이므로 block도 무관)
 
-    if (parsedData.length === 0) {
-      alert("유효한 데이터가 없습니다. 파일을 확인해주세요.");
-      return;
-    }
+      this.els.issueCount.textContent = totalIssues;
+      this.els.userCount.textContent = totalUsers;
+    },
 
-    deduplicatedData = deduplicateIssues(parsedData);
+    switchView(viewName) {
+      this.els.views.calendar.classList.remove("active");
+      this.els.views.list.classList.remove("active");
+      this.els.views[viewName].classList.add("active");
+    },
+  };
 
-    const uniqueUsers = [...new Set(deduplicatedData.map((item) => item.targetLdap))].sort();
+  // 3. APP CONTROLLER
+  const App = {
+    calendarInstance: null,
 
-    userSelect.innerHTML = `<option value="">전체 보기 (요약 모드)</option>`;
-    uniqueUsers.forEach((user) => {
-      const count = deduplicatedData.filter((i) => i.targetLdap === user).length;
-      const option = document.createElement("option");
-      option.value = user;
-      option.textContent = `${user} (${count}건)`;
-      userSelect.appendChild(option);
-    });
+    init() {
+      this.bindEvents();
+      this.loadSession();
+    },
 
-    userSelect.disabled = false;
+    loadSession() {
+      const cachedText = localStorage.getItem("watchtower_cached_text");
+      const cachedName = localStorage.getItem("watchtower_cached_filename");
 
-    globalStats.style.display = "block";
-    totalIssueCount.textContent = deduplicatedData.length;
-    totalUserCount.textContent = uniqueUsers.length;
+      if (cachedText) {
+        State.rawText = cachedText;
+        UI.updateFileName(cachedName || "복구된 파일", true);
+        this.processData();
+      } else {
+        UI.reset();
+      }
+    },
 
-    renderApp("");
-  }
+    handleFileSelect(file) {
+      if (!file) return;
+      if (!file.name.toLowerCase().endsWith(".txt") && file.type !== "text/plain") {
+        alert("텍스트(.txt) 파일만 지원합니다.");
+        return;
+      }
 
-  // --- [Logic 2] 데이터 정제 (중복 제거) ---
-  function deduplicateIssues(data) {
-    const map = new Map();
+      UI.updateFileName(file.name, false);
 
-    data.forEach((item) => {
-      const uniqueKey = `${item.isoDate}_${item.issueKey}`;
-
-      if (map.has(uniqueKey)) {
-        const existing = map.get(uniqueKey);
-        if (existing.actionType !== "할당" && item.actionType === "할당") {
-          map.set(uniqueKey, item);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target.result;
+        if (!text.trim()) {
+          alert("내용 없음");
+          return;
         }
-      } else {
-        map.set(uniqueKey, item);
-      }
-    });
+        State.saveSession(file.name, text);
+        this.processData();
+      };
+      reader.readAsText(file);
+    },
 
-    return Array.from(map.values());
-  }
+    processData() {
+      // --- Parsing Logic ---
+      const parse = (text) => {
+        const results = [];
+        const lines = text.split("\n");
+        const headerPattern = /\[WatchCenter\] \[(.*?)\]/;
+        const datePattern = /-{15}\s(\d{4}년\s\d{1,2}월\s\d{1,2}일.*?)\s-{15}/;
+        let currentDate = "",
+          currentIso = "",
+          buffer = [],
+          bufferTime = "";
 
-  // --- [Logic 3] 정밀 파서 (버퍼 방식) ---
-  function parseKakaoLogJS(text) {
-    const results = [];
-    const lines = text.split("\n");
+        const toIso = (s) => {
+          const m = s.match(/\d+/g);
+          return m && m.length >= 3 ? `${m[0]}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}` : "";
+        };
 
-    const datePattern = /-{15}\s(\d{4}년\s\d{1,2}월\s\d{1,2}일.*?)\s-{15}/;
-    const headerPattern = /\[WatchCenter\] \[(.*?)\]/;
+        const flush = () => {
+          if (buffer.length === 0) return;
+          const first = buffer[0];
+          let user = first.includes("님") ? first.split("님")[0].trim() : first.trim();
+          if (!user) user = "알 수 없음";
+          let key = "키 없음",
+            url = "#",
+            summary = "",
+            action = "알림",
+            found = false;
 
-    let currentDate = "날짜 미상";
-    let currentIsoDate = "";
+          buffer.forEach((line, i) => {
+            const l = line.trim();
+            const kMatch = l.match(/browse\/([A-Z]+-\d+)/);
+            if (kMatch) {
+              key = kMatch[1];
+              url = l;
+              if (buffer[i + 1]) summary = buffer[i + 1].replace(/[└|]/g, "").trim();
+            }
+            if (["할당", "멘션", "코멘트"].some((k) => l.includes(k))) {
+              if (l.includes("할당")) action = "할당";
+              else if (l.includes("멘션")) action = "멘션";
+              else action = "코멘트";
+              found = true;
+            }
+          });
+          if (found || key !== "키 없음") {
+            results.push({ targetLdap: user, issueKey: key, summary, actionType: action, rawDate: bufferTime, isoDate: currentIso, fullDate: currentDate, issueUrl: url });
+          }
+          buffer = [];
+        };
 
-    let messageBuffer = [];
-    let bufferTimestamp = "";
-
-    const toIso = (dateStr) => {
-      const nums = dateStr.match(/\d+/g);
-      if (nums && nums.length >= 3) return `${nums[0]}-${String(nums[1]).padStart(2, "0")}-${String(nums[2]).padStart(2, "0")}`;
-      return "";
-    };
-
-    const flushBuffer = () => {
-      if (messageBuffer.length === 0) return;
-
-      // 1. LDAP 추출 (첫 줄에 있음)
-      // 예: "  userid 님아" 또는 "  userid님∽" 또는 "   님아" (주석 수정됨)
-      const firstLine = messageBuffer[0];
-      let rawTarget = "";
-      if (firstLine.includes("님")) {
-        rawTarget = firstLine.split("님")[0].trim();
-      } else {
-        rawTarget = firstLine.trim();
-      }
-
-      const targetLdap = rawTarget === "" ? "알 수 없음" : rawTarget;
-
-      // 2. 내용 분석
-      let issueKey = "키 없음";
-      let issueUrl = "#";
-      let summary = "";
-      let actionType = "알림";
-      let foundAction = false;
-
-      messageBuffer.forEach((line, idx) => {
-        const cleanLine = line.trim();
-
-        const keyMatch = cleanLine.match(/browse\/([A-Z]+-\d+)/);
-        if (keyMatch) {
-          issueKey = keyMatch[1];
-          issueUrl = cleanLine;
-          if (messageBuffer[idx + 1]) {
-            summary = messageBuffer[idx + 1].replace(/[└|]/g, "").trim();
+        for (let line of lines) {
+          line = line.trim();
+          if (!line) continue;
+          if (datePattern.test(line)) {
+            flush();
+            currentDate = line.match(datePattern)[1];
+            currentIso = toIso(currentDate);
+            continue;
+          }
+          const hMatch = line.match(headerPattern);
+          if (hMatch) {
+            flush();
+            bufferTime = hMatch[1];
+            buffer.push(line.replace(headerPattern, "").trim());
+          } else {
+            buffer.push(line);
           }
         }
+        flush();
+        return results;
+      };
 
-        if (["할당", "멘션", "코멘트", "생성"].some((k) => cleanLine.includes(k))) {
-          if (cleanLine.includes("할당")) actionType = "할당";
-          else if (cleanLine.includes("멘션")) actionType = "멘션";
-          else actionType = "코멘트";
-          foundAction = true;
-        }
-      });
-
-      if (foundAction || issueKey !== "키 없음") {
-        results.push({
-          targetLdap,
-          issueKey,
-          summary,
-          actionType,
-          rawDate: bufferTimestamp,
-          fullDate: currentDate,
-          isoDate: currentIsoDate,
-          issueUrl,
+      const deduplicate = (data) => {
+        const map = new Map();
+        data.forEach((item) => {
+          const k = `${item.isoDate}_${item.issueKey}`;
+          if (map.has(k)) {
+            const ex = map.get(k);
+            if (ex.actionType !== "할당" && item.actionType === "할당") map.set(k, item);
+          } else {
+            map.set(k, item);
+          }
         });
+        return Array.from(map.values());
+      };
+
+      State.parsedData = parse(State.rawText);
+      if (State.parsedData.length === 0) {
+        alert("데이터 없음");
+        UI.reset();
+        return;
       }
+      State.dedupData = deduplicate(State.parsedData);
+      this.updateFilters();
+      UI.renderStats(State.dedupData.length, [...new Set(State.dedupData.map((d) => d.targetLdap))].length);
+      this.renderCalendar(UI.els.userSelect.value);
+    },
 
-      messageBuffer = [];
-    };
+    updateFilters() {
+      const users = [...new Set(State.dedupData.map((d) => d.targetLdap))].sort();
+      const prev = UI.els.userSelect.value;
+      UI.els.userSelect.innerHTML = `<option value="">전체 보기 (요약 모드)</option>`;
+      users.forEach((u) => {
+        const count = State.dedupData.filter((d) => d.targetLdap === u).length;
+        const opt = document.createElement("option");
+        opt.value = u;
+        opt.textContent = `${u} (${count}건)`;
+        UI.els.userSelect.appendChild(opt);
+      });
+      UI.els.userSelect.disabled = false;
+      if (users.includes(prev)) UI.els.userSelect.value = prev;
+    },
 
-    for (let i = 0; i < lines.length; i++) {
-      let line = lines[i].trim();
-      if (!line) continue;
+    renderCalendar(filterUser) {
+      if (!UI.els.calendarEl) return;
+      const data = filterUser === "" ? State.dedupData : State.dedupData.filter((d) => d.targetLdap === filterUser);
+      const isSummary = filterUser === "";
+      let events = [];
 
-      const dateMatch = line.match(datePattern);
-      if (dateMatch) {
-        flushBuffer();
-        currentDate = dateMatch[1];
-        currentIsoDate = toIso(currentDate);
-        continue;
-      }
-
-      const headerMatch = line.match(headerPattern);
-      if (headerMatch) {
-        flushBuffer();
-        bufferTimestamp = headerMatch[1];
-        const remaining = line.replace(headerPattern, "").trim();
-        messageBuffer.push(remaining);
+      if (isSummary) {
+        const map = new Map();
+        data.forEach((d) => {
+          const k = `${d.isoDate}_${d.targetLdap}`;
+          if (!map.has(k)) map.set(k, { id: d.targetLdap, date: d.isoDate, assign: 0, mention: 0, comment: 0 });
+          const s = map.get(k);
+          if (d.actionType === "할당") s.assign++;
+          else if (d.actionType === "멘션") s.mention++;
+          else s.comment++;
+        });
+        events = Array.from(map.values()).map((s) => {
+          const t = [];
+          if (s.assign) t.push(`할당 ${s.assign}`);
+          if (s.mention) t.push(`멘션 ${s.mention}`);
+          if (s.comment) t.push(`코멘트 ${s.comment}`);
+          return { title: `[${s.id}] ${t.join(" ")}`, start: s.date, color: "#64748b", extendedProps: { userId: s.id } };
+        });
       } else {
-        messageBuffer.push(line);
+        events = data.map((d) => ({
+          title: d.issueKey,
+          start: d.isoDate,
+          color: d.actionType === "할당" ? "#3b82f6" : d.actionType === "멘션" ? "#f97316" : "#22c55e",
+          extendedProps: { ...d },
+        }));
       }
-    }
-    flushBuffer();
 
-    return results;
-  }
+      this.calendarInstance = new FullCalendar.Calendar(UI.els.calendarEl, {
+        initialView: "dayGridMonth",
+        locale: "ko",
+        height: "100%",
+        headerToolbar: { left: "prev,next today", center: "title", right: "" },
+        dayMaxEvents: 4,
+        events: events,
+        eventClick: (info) => {
+          const props = info.event.extendedProps;
+          this.showList(info.event.startStr, isSummary ? props.userId : filterUser);
+        },
+        dateClick: (info) => this.showList(info.dateStr, filterUser || null),
+      });
+      this.calendarInstance.render();
+      if (data.length > 0) this.calendarInstance.gotoDate(data[0].isoDate);
+      UI.switchView("calendar");
+    },
 
-  // --- [Logic 4] 앱 렌더링 ---
-  function renderApp(filterLdap) {
-    if (filterLdap === "") {
-      currentFilteredData = deduplicatedData;
-    } else {
-      currentFilteredData = deduplicatedData.filter((item) => item.targetLdap === filterLdap);
-    }
+    showList(date, user) {
+      let filtered = State.dedupData.filter((d) => d.isoDate === date);
+      if (user) filtered = filtered.filter((d) => d.targetLdap === user);
 
-    initCalendar(filterLdap);
-    showCalendarView();
-  }
+      UI.els.listTitle.innerHTML = `
+        <span class="iconify" data-icon="heroicons:calendar-days-solid" style="color:#64748b; font-size:20px; margin-right:6px;"></span>
+        ${date} <span style="font-size:14px; color:#64748b; margin-left:6px;">(${filtered.length}건)</span>
+      `;
 
-  // --- [UI] 캘린더 생성 ---
-  function initCalendar(filterLdap) {
-    const calendarEl = document.getElementById("calendar");
-    const isAllView = filterLdap === "";
+      UI.els.cardGrid.innerHTML = filtered.length ? "" : '<div style="grid-column:1/-1; text-align:center; padding:40px; color:#94a3b8;">데이터 없음</div>';
 
-    let calendarEvents = [];
+      filtered.forEach((d) => {
+        const isRead = State.readIssues.includes(d.issueKey);
+        const div = document.createElement("div");
+        div.className = `issue-card ${isRead ? "read" : ""}`;
+        let badgeColor = d.actionType === "할당" ? "background:#eff6ff; color:#1d4ed8;" : d.actionType === "멘션" ? "background:#fff7ed; color:#c2410c;" : "background:#f0fdf4; color:#15803d;";
 
-    if (isAllView) {
-      const summaryMap = new Map();
+        div.innerHTML = `
+          <div class="check-btn" onclick="App.toggleIssue('${d.issueKey}', this)">
+            <span class="iconify" data-icon="heroicons:check-circle-solid" style="font-size:20px;"></span>
+          </div>
+          <div class="card-header">
+            <span class="badge" style="${badgeColor}">${d.actionType}</span> 
+            <a href="${d.issueUrl}" target="_blank" class="issue-link">${d.issueKey}</a>
+          </div>
+          <div class="card-body">${d.summary}</div>
+          <div class="card-footer">
+            <span class="meta-date">${d.fullDate} ${d.rawDate}</span> 
+            <div class="user-info">
+              <span class="iconify" data-icon="heroicons:user-circle-solid" style="font-size:16px;"></span>
+              ${d.targetLdap}
+            </div>
+          </div>
+        `;
+        UI.els.cardGrid.appendChild(div);
+      });
+      UI.switchView("list");
+    },
 
-      currentFilteredData.forEach((item) => {
-        const key = `${item.isoDate}_${item.targetLdap}`;
-        if (!summaryMap.has(key)) {
-          summaryMap.set(key, {
-            id: item.targetLdap,
-            date: item.isoDate,
-            assign: 0,
-            comment: 0,
-            mention: 0,
-          });
-        }
-        const stat = summaryMap.get(key);
-        if (item.actionType === "할당") stat.assign++;
-        else if (item.actionType === "멘션") stat.mention++;
-        else stat.comment++;
+    toggleIssue(key, btn) {
+      const card = btn.closest(".issue-card");
+      if (State.readIssues.includes(key)) {
+        State.readIssues = State.readIssues.filter((k) => k !== key);
+        card.classList.remove("read");
+      } else {
+        State.readIssues.push(key);
+        card.classList.add("read");
+      }
+      localStorage.setItem("readIssues_v3", JSON.stringify(State.readIssues));
+    },
+
+    bindEvents() {
+      UI.els.fileInput.addEventListener("change", (e) => {
+        if (e.target.files.length) this.handleFileSelect(e.target.files[0]);
+        e.target.value = "";
+      });
+      ["dragenter", "dragover", "dragleave", "drop"].forEach((evt) => {
+        UI.els.dropZone.addEventListener(evt, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        });
+        window.addEventListener(evt, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        });
+      });
+      UI.els.dropZone.addEventListener("dragenter", () => UI.els.dropZone.classList.add("drag-over"));
+      UI.els.dropZone.addEventListener("dragover", () => UI.els.dropZone.classList.add("drag-over"));
+      UI.els.dropZone.addEventListener("dragleave", () => UI.els.dropZone.classList.remove("drag-over"));
+      UI.els.dropZone.addEventListener("drop", (e) => {
+        UI.els.dropZone.classList.remove("drag-over");
+        if (e.dataTransfer.files.length) this.handleFileSelect(e.dataTransfer.files[0]);
       });
 
-      calendarEvents = Array.from(summaryMap.values()).map((stat) => {
-        const parts = [];
-        if (stat.assign) parts.push(`할당 ${stat.assign}`);
-        if (stat.mention) parts.push(`멘션 ${stat.mention}`);
-        if (stat.comment) parts.push(`코멘트 ${stat.comment}`);
-
-        return {
-          title: `[${stat.id}] ${parts.join(", ")}`,
-          start: stat.date,
-          color: "#64748b",
-          extendedProps: { isSummary: true, userId: stat.id },
+      UI.els.userSelect.addEventListener("change", () => this.renderCalendar(UI.els.userSelect.value));
+      UI.els.btns.back.addEventListener("click", () => {
+        UI.switchView("calendar");
+        if (this.calendarInstance) this.calendarInstance.render();
+      });
+      UI.els.btns.clear.addEventListener("click", () => {
+        if (confirm("저장된 데이터를 모두 지우고 초기화하시겠습니까?")) {
+          State.clearSession();
+          location.reload();
+        }
+      });
+      UI.els.btns.save.addEventListener("click", () => {
+        if (!State.rawText) {
+          alert("데이터 없음");
+          return;
+        }
+        const now = new Date();
+        const dateStr = now.getFullYear() + String(now.getMonth() + 1).padStart(2, "0") + String(now.getDate()).padStart(2, "0") + "_" + String(now.getHours()).padStart(2, "0") + String(now.getMinutes()).padStart(2, "0");
+        const data = { date: now.toISOString(), readIssues: State.readIssues, cachedText: State.rawText };
+        const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `JiraWatchtower_Backup_${dateStr}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+      UI.els.btns.restore.addEventListener("click", () => UI.els.backupInput.click());
+      UI.els.backupInput.addEventListener("change", (e) => {
+        if (!e.target.files.length) return;
+        const r = new FileReader();
+        r.onload = (ev) => {
+          try {
+            const json = JSON.parse(ev.target.result);
+            if (json.readIssues) {
+              State.readIssues = json.readIssues;
+              localStorage.setItem("readIssues_v3", JSON.stringify(State.readIssues));
+            }
+            if (json.cachedText) {
+              this.handleFileSelect(new File([json.cachedText], "Restored_Backup.txt", { type: "text/plain" }));
+            }
+            alert("복구 완료");
+          } catch (err) {
+            alert("백업 파일 오류");
+          }
         };
+        r.readAsText(e.target.files[0]);
+        e.target.value = "";
       });
-    } else {
-      calendarEvents = currentFilteredData.map((item) => ({
-        title: item.issueKey,
-        start: item.isoDate,
-        backgroundColor: getColor(item.actionType),
-        borderColor: getColor(item.actionType),
-        extendedProps: item,
-      }));
-    }
+    },
+    els: () => UI.els,
+  };
 
-    calendar = new FullCalendar.Calendar(calendarEl, {
-      initialView: "dayGridMonth",
-      locale: "ko",
-      height: "100%",
-      headerToolbar: { left: "prev,next today", center: "title", right: "" },
-      dayMaxEvents: 4,
-
-      events: calendarEvents,
-
-      dateClick: (info) => {
-        showListView(info.dateStr, isAllView ? null : filterLdap);
-      },
-
-      eventClick: (info) => {
-        const props = info.event.extendedProps;
-        if (props.isSummary) {
-          showListView(info.event.startStr, props.userId);
-        } else {
-          showListView(info.event.startStr, filterLdap);
-        }
-      },
-
-      dayCellDidMount: (info) => {
-        if (isAllView) return;
-
-        const dateStr = info.dateStr;
-        const dayItems = currentFilteredData.filter((i) => i.isoDate === dateStr);
-
-        if (dayItems.length > 0) {
-          const statsDiv = document.createElement("div");
-          statsDiv.className = "day-stats";
-          let counts = { 할당: 0, 멘션: 0, 코멘트: 0 };
-          dayItems.forEach((i) => counts[i.actionType]++);
-          if (counts.할당) statsDiv.innerHTML += `<div class="stat-dot assign"></div>`;
-          if (counts.멘션) statsDiv.innerHTML += `<div class="stat-dot mention"></div>`;
-          if (counts.코멘트) statsDiv.innerHTML += `<div class="stat-dot comment"></div>`;
-          info.el.querySelector(".fc-daygrid-day-top").appendChild(statsDiv);
-        }
-      },
-    });
-
-    calendar.render();
-    if (currentFilteredData.length > 0) calendar.gotoDate(currentFilteredData[0].isoDate);
-  }
-
-  // --- [UI] 리스트 뷰 ---
-  function showListView(dateStr, specificUser = null) {
-    let targetData = deduplicatedData.filter((i) => i.isoDate === dateStr);
-
-    if (specificUser) {
-      targetData = targetData.filter((i) => i.targetLdap === specificUser);
-    } else if (userSelect.value !== "") {
-      targetData = targetData.filter((i) => i.targetLdap === userSelect.value);
-    }
-
-    const titleText = specificUser ? `📅 ${dateStr} - ${specificUser} 이슈` : `📅 ${dateStr} 전체 이슈`;
-
-    listTitle.innerHTML = `${titleText} <span style="font-size:14px; color:#64748b; font-weight:normal;">(${targetData.length}건)</span>`;
-    cardGrid.innerHTML = "";
-
-    if (targetData.length === 0) {
-      cardGrid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:50px; color:#94a3b8;">표시할 이슈가 없습니다.</div>`;
-    } else {
-      targetData.forEach((item) => {
-        const isRead = readIssues.includes(item.issueKey);
-        const card = document.createElement("div");
-        card.className = `issue-card ${isRead ? "read" : ""}`;
-
-        let badgeClass = "assign";
-        if (item.actionType === "멘션") badgeClass = "mention";
-        if (item.actionType === "코멘트") badgeClass = "comment";
-
-        card.innerHTML = `
-                    <div class="check-btn" data-key="${item.issueKey}">
-                        <span class="iconify" data-icon="heroicons:check-16-solid"></span>
-                    </div>
-                    <div style="margin-bottom:10px;">
-                        <span class="badge ${badgeClass}">${item.actionType}</span>
-                        <span style="font-size:11px; color:#64748b; margin-left:5px;">👤 ${item.targetLdap}</span>
-                        <a href="${item.issueUrl}" target="_blank" style="font-weight:700; color:#1e293b; text-decoration:none; margin-left:5px;">
-                            ${item.issueKey}
-                        </a>
-                    </div>
-                    <div style="font-size:14px; margin-bottom:10px; line-height:1.5;">${item.summary}</div>
-                    <div style="font-size:12px; color:#94a3b8;">${item.fullDate} ${item.rawDate}</div>
-                `;
-
-        const checkBtn = card.querySelector(".check-btn");
-        checkBtn.addEventListener("click", (e) => toggleRead(item.issueKey, checkBtn));
-        cardGrid.appendChild(card);
-      });
-    }
-
-    calendarView.classList.remove("active");
-    listView.classList.add("active");
-  }
-
-  function showCalendarView() {
-    listView.classList.remove("active");
-    calendarView.classList.add("active");
-    if (calendar) calendar.render();
-  }
-
-  function toggleRead(key, btn) {
-    const card = btn.closest(".issue-card");
-    if (readIssues.includes(key)) {
-      readIssues = readIssues.filter((k) => k !== key);
-      card.classList.remove("read");
-    } else {
-      readIssues.push(key);
-      card.classList.add("read");
-    }
-    localStorage.setItem("readIssues_v3", JSON.stringify(readIssues));
-  }
-
-  function getColor(type) {
-    if (type === "할당") return "#3b82f6";
-    if (type === "멘션") return "#f97316";
-    return "#22c55e";
-  }
+  window.App = App;
+  App.init();
 });
