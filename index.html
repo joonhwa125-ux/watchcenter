@@ -4,10 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Jira Watchtower</title>
-
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/iconify/3.1.1/iconify.min.js"></script>
-
     <link rel="stylesheet" href="css/style.css" />
   </head>
   <body>
@@ -18,45 +16,56 @@
           Watchtower
         </div>
 
-        <div class="upload-box" id="uploadDropZone">
-          <span class="iconify" data-icon="heroicons:cloud-arrow-up" style="font-size: 24px; color: var(--text-sub)"></span>
-          <div style="font-weight: 600; margin-top: 5px">파일 선택</div>
-          <div class="upload-desc" id="fileName">KakaoTalk_Chats.txt</div>
-          <input type="file" id="fileInput" accept=".txt" style="display: none" />
+        <label class="upload-area" id="dropZone" for="fileInput">
+          <div class="upload-content">
+            <span class="iconify" data-icon="heroicons:cloud-arrow-up" style="font-size: 28px; color: var(--text-sub)"></span>
+            <div class="upload-title">파일 선택 / 드래그</div>
+            <div class="upload-desc" id="fileName">선택된 파일 없음</div>
+          </div>
+          <input type="file" id="fileInput" accept=".txt" />
+        </label>
+
+        <div class="group-section" id="statsSection" style="display: none">
+          <label class="group-label">분석 요약</label>
+          <div class="stats-panel">
+            <div class="stat-item"><span class="dot red"></span> 이슈 <strong id="totalIssueCount">0</strong>건</div>
+            <div class="stat-item"><span class="dot blue"></span> 참여자 <strong id="totalUserCount">0</strong>명</div>
+          </div>
         </div>
 
-        <div class="search-group">
-          <label for="userSelect">사용자 선택</label>
+        <div class="group-section">
+          <label class="group-label">담당자 필터</label>
           <select id="userSelect" class="search-select" disabled>
-            <option value="">파일을 먼저 올려주세요</option>
+            <option value="">데이터 없음</option>
           </select>
         </div>
 
-        <div class="stats-box" id="globalStats" style="display: none">
-          <div>발견된 이슈: <span id="totalIssueCount">0</span>건</div>
-          <div>참여자: <span id="totalUserCount">0</span>명</div>
+        <div class="bottom-actions">
+          <div id="restoreNotice" class="restore-notice" style="display: none">
+            이전 데이터 복구됨
+            <button id="btnClearData" class="btn-text">지우기</button>
+          </div>
+          <div class="action-buttons">
+            <button class="btn-action" id="btnDownloadBackup" title="백업 저장"><span class="iconify" data-icon="heroicons:arrow-down-tray"></span> 저장</button>
+            <button class="btn-action" id="btnRestoreBackup" title="백업 복구"><span class="iconify" data-icon="heroicons:arrow-up-tray"></span> 복구</button>
+            <input type="file" id="backupInput" accept=".json" style="display: none" />
+          </div>
         </div>
-
-        <div class="footer-info">Data stays in your browser.<br />100% Secure.</div>
       </aside>
 
       <main class="main-content">
         <div id="calendarView" class="view-section active">
-          <div id="calendarWrapper">
-            <div id="calendar"></div>
-          </div>
+          <div id="calendarWrapper"><div id="calendar"></div></div>
         </div>
-
         <div id="listView" class="view-section">
           <div class="list-header">
-            <button class="btn-back" id="btnBackToCalendar"><span class="iconify" data-icon="heroicons:arrow-left"></span> 캘린더로 복귀</button>
-            <div class="list-title" id="listTitle">날짜 상세</div>
+            <button class="btn-back" id="btnBackToCalendar"><span class="iconify" data-icon="heroicons:chevron-left-20-solid"></span> 돌아가기</button>
+            <div class="list-title" id="listTitle">상세 내역</div>
           </div>
           <div id="cardGrid" class="card-grid"></div>
         </div>
       </main>
     </div>
-
     <script src="js/app.js"></script>
   </body>
 </html>
